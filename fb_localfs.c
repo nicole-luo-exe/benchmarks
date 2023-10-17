@@ -49,6 +49,54 @@
 #include <aio.h>
 #endif /* HAVE_AIO */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int pipe_fd[2];
+int pipe_fd_input[2];
+
+int initialize() {
+      // File descriptors for the pipe
+    pid_t child_pid;
+
+    // Create a pipe
+    if (pipe(pipe_fd) == -1 || pipe(pipe_fd_input)) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    // Fork the process
+    child_pid = fork();
+
+    if (child_pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (child_pid == 0) {
+        // This is the child process
+        close(pipe_fd[1]);  // Close the write end of the pipe
+
+        // Redirect stdin to read from the pipe
+        dup2(pipe_fd[0], STDIN_FILENO);
+        dup2(pipe_fd_input[1], STDOUT_FILENO);
+        close(pipe_fd[0]);  // Close the read end of the pipe
+
+		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
+
+        // Now, the child can read from stdin
+        execlp(file, file, "6768", "127.0.0.1:6767");
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    } else {
+		close(pipe_fd[0]);
+		close(pipe_fd_input[1]);
+	}
+
+    return 0;
+}
+
 /*
  * These routines implement local file access. They are placed into a
  * vector of functions that are called by all I/O operations in fileset.c
@@ -199,7 +247,10 @@ fb_lfs_pread(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t fileoffset)
 static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	return (read(fd->fd_num, iobuf, iosize));
+	char result[100];
+    sprintf(result, "load (%s)\n", fd->name);
+	write(pipe_fd[1], result, 100);
+	return (read(pipe_fd_input[0], iobuf, iosize));
 }
 
 #ifdef HAVE_AIO
@@ -487,10 +538,7 @@ fb_lfsflow_aiowait(threadflow_t *threadflow, flowop_t *flowop)
 static int
 fb_lfs_open(fb_fdesc_t *fd, char *path, int flags, int perms)
 {
-	if ((fd->fd_num = open64(path, flags, perms)) < 0)
-		return (FILEBENCH_ERROR);
-	else
-		return (FILEBENCH_OK);
+	return (FILEBENCH_OK);
 }
 
 /*
@@ -647,7 +695,9 @@ fb_lfs_pwrite(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t offset)
 static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	return (write(fd->fd_num, iobuf, iosize));
+	char result[100];
+    sprintf(result, "save (%s) (%s)\n", fd->name, iobuf);
+	return write(pipe_fd[1], result, 100+iosize);
 }
 
 /*
