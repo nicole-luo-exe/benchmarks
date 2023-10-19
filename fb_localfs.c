@@ -53,15 +53,17 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int pipe_fd[2];
-int pipe_fd_input[2];
+static int pipe_fd[2];
+static int pipe_fd_input[2];
 
-int initialize() {
+void kademlia_init() {
+
+	printf("Initializing Kademlia...\n");
       // File descriptors for the pipe
     pid_t child_pid;
 
     // Create a pipe
-    if (pipe(pipe_fd) == -1 || pipe(pipe_fd_input)) {
+    if (pipe(pipe_fd) == -1 || pipe(pipe_fd_input) == -1) {
         perror("pipe");
         exit(EXIT_FAILURE);
     }
@@ -77,13 +79,14 @@ int initialize() {
     if (child_pid == 0) {
 		printf("Created child process...\n");
         // This is the child process
-        close(pipe_fd[1]);  // Close the write end of the pipe
-
         // Redirect stdin to read from the pipe
+        close(pipe_fd[1]);
+		close(pipe_fd_input[0]);
         dup2(pipe_fd[0], STDIN_FILENO);
         dup2(pipe_fd_input[1], STDOUT_FILENO);
-        close(pipe_fd[0]);  // Close the read end of the pipe
-
+		close(pipe_fd[0]);
+		close(pipe_fd_input[1]);
+        
 		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
 
         // Now, the child can read from stdin
@@ -91,12 +94,11 @@ int initialize() {
         perror("execlp");
         exit(EXIT_FAILURE);
     } else {
+		close(STDIN_FILENO);
 		close(pipe_fd[0]);
 		close(pipe_fd_input[1]);
 		printf("Finish initializing Kademlia\n");
 	}
-
-    return 0;
 }
 
 /*
@@ -184,7 +186,6 @@ static flowop_proto_t fb_lfsflow_funcs[] = {
 void
 fb_lfs_funcvecinit(void)
 {
-	initialize();
 	fs_functions_vec = &fb_lfs_funcs;
 }
 
@@ -250,10 +251,12 @@ fb_lfs_pread(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t fileoffset)
 static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	char result[100];
-    sprintf(result, "load (%s)\n", fd->fname);
-	write(pipe_fd[1], result, 100);
-	return (read(pipe_fd_input[0], iobuf, iosize));
+	size_t s = 128 + 5;
+	char result[s];
+    sprintf(result, "get %s\n", fd->fname);
+	write(pipe_fd[1], result, s);
+	read(pipe_fd_input[0], iobuf, iosize);
+	return FILEBENCH_OK;
 }
 
 #ifdef HAVE_AIO
@@ -541,8 +544,15 @@ fb_lfsflow_aiowait(threadflow_t *threadflow, flowop_t *flowop)
 static int
 fb_lfs_open(fb_fdesc_t *fd, char *path, int flags, int perms)
 {
-	strcpy(fd->fname, path+26);
-	return (FILEBENCH_OK);
+	// memset(fd->fname, '\0', sizeof(fd->fname));
+	strcpy(fd->fname, path);
+	if(1) {
+		// printf("open success\n");
+		return FILEBENCH_OK;
+	} else {
+		// printf("open failed\n");	
+		return (FILEBENCH_ERROR);
+	}
 }
 
 /*
@@ -699,9 +709,27 @@ fb_lfs_pwrite(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t offset)
 static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	char result[100];
-    sprintf(result, "save (%s) (%s)\n", fd->fname, iobuf);
-	return write(pipe_fd[1], result, 100+iosize);
+	// printf("RUNNING WRITE\n");
+	size_t s = 128 + 5;
+	char result[s];
+    sprintf(result, "put %s ", fd->fname);
+	for (size_t i = 0; i < s; i++) {
+		if (result[i] == '\0') {
+			s = i;
+			break;
+		} else {
+			*(iobuf + i) = result[i];
+		}
+	}
+	for (size_t i = s; i < iosize; i++) {
+		*(iobuf + i) = rand() % 26 + 'a';
+	}
+	*(iobuf + iosize - 2) = '\n';
+	write(pipe_fd[1], iobuf, iosize + 1);
+	char buf[60];
+	read(pipe_fd_input[0], buf, 60);
+	// printf("Write result: %s\n", iobuf);
+	return (iosize);
 }
 
 /*

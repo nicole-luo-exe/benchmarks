@@ -394,6 +394,7 @@ fileset_alloc_file(filesetentry_t *entry)
 
 		ret = FB_WRITE(&fdesc, buf, wsize);
 		if (ret != wsize) {
+			printf("Failed here, buffer %d\n", ret);
 			filebench_log(LOG_ERROR,
 			    "Failed to pre-allocate file %s: %s",
 			    path, strerror(errno));
