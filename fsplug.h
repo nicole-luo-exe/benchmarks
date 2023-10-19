@@ -44,6 +44,7 @@ typedef enum fb_plugin_type {
 typedef union fb_fdesc {
 	int		fd_num;		/* OS file descriptor number */
 	void		*fd_ptr;	/* Pointer to nfs information block */
+	char    	fname[94];
 } fb_fdesc_t;
 
 typedef struct aiolist aiol_t;

@@ -75,6 +75,7 @@ int initialize() {
     }
 
     if (child_pid == 0) {
+		printf("Created child process...\n");
         // This is the child process
         close(pipe_fd[1]);  // Close the write end of the pipe
 
@@ -86,12 +87,13 @@ int initialize() {
 		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
 
         // Now, the child can read from stdin
-        execlp(file, file, "6768", "127.0.0.1:6767");
+        execlp(file, file, "6768", "127.0.0.1:6767", NULL);
         perror("execlp");
         exit(EXIT_FAILURE);
     } else {
 		close(pipe_fd[0]);
 		close(pipe_fd_input[1]);
+		printf("Finish initializing Kademlia\n");
 	}
 
     return 0;
@@ -182,6 +184,7 @@ static flowop_proto_t fb_lfsflow_funcs[] = {
 void
 fb_lfs_funcvecinit(void)
 {
+	initialize();
 	fs_functions_vec = &fb_lfs_funcs;
 }
 
@@ -248,7 +251,7 @@ static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
 	char result[100];
-    sprintf(result, "load (%s)\n", fd->name);
+    sprintf(result, "load (%s)\n", fd->fname);
 	write(pipe_fd[1], result, 100);
 	return (read(pipe_fd_input[0], iobuf, iosize));
 }
@@ -538,6 +541,7 @@ fb_lfsflow_aiowait(threadflow_t *threadflow, flowop_t *flowop)
 static int
 fb_lfs_open(fb_fdesc_t *fd, char *path, int flags, int perms)
 {
+	strcpy(fd->fname, path+26);
 	return (FILEBENCH_OK);
 }
 
@@ -574,7 +578,7 @@ fb_lfs_fsync(fb_fdesc_t *fd)
 static int
 fb_lfs_lseek(fb_fdesc_t *fd, off64_t offset, int whence)
 {
-	return (lseek64(fd->fd_num, offset, whence));
+	return 0;
 }
 
 /*
@@ -602,7 +606,7 @@ fb_lfs_close(fb_fdesc_t *fd)
 static int
 fb_lfs_mkdir(char *path, int perm)
 {
-	return (mkdir(path, perm));
+	return (FILEBENCH_OK);
 }
 
 /*
@@ -696,7 +700,7 @@ static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
 	char result[100];
-    sprintf(result, "save (%s) (%s)\n", fd->name, iobuf);
+    sprintf(result, "save (%s) (%s)\n", fd->fname, iobuf);
 	return write(pipe_fd[1], result, 100+iosize);
 }
 
