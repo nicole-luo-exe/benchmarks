@@ -49,6 +49,57 @@
 #include <aio.h>
 #endif /* HAVE_AIO */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+static int command_pipe[2];
+static int response_pipe[2];
+
+void kademlia_init() {
+
+	filebench_log(LOG_INFO, "Initializing Kademlia...");
+      // File descriptors for the pipe
+    pid_t child_pid;
+
+    // Create a pipe
+    if (pipe(command_pipe) == -1 || pipe(response_pipe) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    // Fork the process
+    child_pid = fork();
+
+    if (child_pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (child_pid == 0) {
+		filebench_log(LOG_INFO, "Created child process...");
+        // This is the child process
+        // Redirect stdin to read from the pipe
+        close(command_pipe[1]);
+		close(response_pipe[0]);
+        dup2(command_pipe[0], STDIN_FILENO);
+        dup2(response_pipe[1], STDOUT_FILENO);
+        
+		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
+
+        // Now, the child can read from stdin
+        execlp(file, file, "6768", "127.0.0.1:6767", NULL);
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    } else {
+		close(STDIN_FILENO);
+		// close(STDOUT_FILENO);
+		close(command_pipe[0]);
+		close(response_pipe[1]);
+		filebench_log(LOG_INFO, "Finish initializing Kademlia");
+	}
+}
+
 /*
  * These routines implement local file access. They are placed into a
  * vector of functions that are called by all I/O operations in fileset.c
@@ -199,7 +250,16 @@ fb_lfs_pread(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t fileoffset)
 static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	return (read(fd->fd_num, iobuf, iosize));
+	size_t s = strlen(fd->fname) + 5;
+	char command[s];
+    sprintf(command, "get %s\n", fd->fname);
+	// printf("%s\n", command);
+	write(command_pipe[1], command, strlen(command));
+	memset(iobuf, '\0', iosize);
+	read(response_pipe[0], iobuf, iosize);
+	printf("Get result %s\n", iobuf);
+	sleep(2);
+	return FILEBENCH_OK;
 }
 
 #ifdef HAVE_AIO
@@ -487,10 +547,15 @@ fb_lfsflow_aiowait(threadflow_t *threadflow, flowop_t *flowop)
 static int
 fb_lfs_open(fb_fdesc_t *fd, char *path, int flags, int perms)
 {
-	if ((fd->fd_num = open64(path, flags, perms)) < 0)
+	memset(fd->fname, '\0', sizeof(fd->fname));
+	strcpy(fd->fname, path);
+	if(1) {
+		// printf("open success\n");
+		return FILEBENCH_OK;
+	} else {
+		// printf("open failed\n");	
 		return (FILEBENCH_ERROR);
-	else
-		return (FILEBENCH_OK);
+	}
 }
 
 /*
@@ -526,7 +591,7 @@ fb_lfs_fsync(fb_fdesc_t *fd)
 static int
 fb_lfs_lseek(fb_fdesc_t *fd, off64_t offset, int whence)
 {
-	return (lseek64(fd->fd_num, offset, whence));
+	return 0;
 }
 
 /*
@@ -554,7 +619,7 @@ fb_lfs_close(fb_fdesc_t *fd)
 static int
 fb_lfs_mkdir(char *path, int perm)
 {
-	return (mkdir(path, perm));
+	return (FILEBENCH_OK);
 }
 
 /*
@@ -647,7 +712,23 @@ fb_lfs_pwrite(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t offset)
 static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	return (write(fd->fd_num, iobuf, iosize));
+	memset(iobuf, 'd', iosize);
+	// printf("RUNNING WRITE\n");
+	size_t s = strlen(fd->fname) + 6;
+	char command[s];
+    sprintf(command, "put %s ", fd->fname);
+	strcpy(iobuf, command);
+	iobuf[s - 1] = 'd';
+	// iobuf[iosize - 1] = '\0';
+	// printf("%s\n", iobuf);
+	// printf("%lu\n", s);
+	iobuf[iosize - 1] = '\n';
+	write(command_pipe[1], iobuf, iosize);
+	char buf[60];
+    memset(buf, '\0', sizeof(buf));
+	read(response_pipe[0], buf, sizeof(buf));
+	printf("Put result: %s\n", buf);
+	return (iosize);
 }
 
 /*

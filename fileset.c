@@ -339,7 +339,7 @@ fileset_alloc_file(filesetentry_t *entry)
 			if (!avd_get_bool(fileset->fs_cached))
 				(void) FB_FREEMEM(&fdesc, entry->fse_size);
 
-			(void) FB_CLOSE(&fdesc);
+			//(void) FB_CLOSE(&fdesc);
 
 			/* unbusy the allocated entry */
 			fileset_unbusy(entry, TRUE, TRUE, 0);
@@ -394,6 +394,7 @@ fileset_alloc_file(filesetentry_t *entry)
 
 		ret = FB_WRITE(&fdesc, buf, wsize);
 		if (ret != wsize) {
+			printf("Failed here, buffer %d\n", ret);
 			filebench_log(LOG_ERROR,
 			    "Failed to pre-allocate file %s: %s",
 			    path, strerror(errno));

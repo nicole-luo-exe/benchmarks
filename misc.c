@@ -480,6 +480,7 @@ script_var(var_t *var)
 	return (var);
 }
 
+void kademlia_init(void);
 void fb_lfs_funcvecinit(void);
 
 /*
