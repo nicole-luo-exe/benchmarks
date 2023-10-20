@@ -53,17 +53,17 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-static int pipe_fd[2];
-static int pipe_fd_input[2];
+static int command_pipe[2];
+static int response_pipe[2];
 
 void kademlia_init() {
 
-	printf("Initializing Kademlia...\n");
+	filebench_log(LOG_INFO, "Initializing Kademlia...");
       // File descriptors for the pipe
     pid_t child_pid;
 
     // Create a pipe
-    if (pipe(pipe_fd) == -1 || pipe(pipe_fd_input) == -1) {
+    if (pipe(command_pipe) == -1 || pipe(response_pipe) == -1) {
         perror("pipe");
         exit(EXIT_FAILURE);
     }
@@ -77,15 +77,13 @@ void kademlia_init() {
     }
 
     if (child_pid == 0) {
-		printf("Created child process...\n");
+		filebench_log(LOG_INFO, "Created child process...");
         // This is the child process
         // Redirect stdin to read from the pipe
-        close(pipe_fd[1]);
-		close(pipe_fd_input[0]);
-        dup2(pipe_fd[0], STDIN_FILENO);
-        dup2(pipe_fd_input[1], STDOUT_FILENO);
-		close(pipe_fd[0]);
-		close(pipe_fd_input[1]);
+        close(command_pipe[1]);
+		close(response_pipe[0]);
+        dup2(command_pipe[0], STDIN_FILENO);
+        dup2(response_pipe[1], STDOUT_FILENO);
         
 		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
 
@@ -95,9 +93,10 @@ void kademlia_init() {
         exit(EXIT_FAILURE);
     } else {
 		close(STDIN_FILENO);
-		close(pipe_fd[0]);
-		close(pipe_fd_input[1]);
-		printf("Finish initializing Kademlia\n");
+		// close(STDOUT_FILENO);
+		close(command_pipe[0]);
+		close(response_pipe[1]);
+		filebench_log(LOG_INFO, "Finish initializing Kademlia");
 	}
 }
 
@@ -251,11 +250,15 @@ fb_lfs_pread(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t fileoffset)
 static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	size_t s = 128 + 5;
-	char result[s];
-    sprintf(result, "get %s\n", fd->fname);
-	write(pipe_fd[1], result, s);
-	read(pipe_fd_input[0], iobuf, iosize);
+	size_t s = strlen(fd->fname) + 5;
+	char command[s];
+    sprintf(command, "get %s\n", fd->fname);
+	// printf("%s\n", command);
+	write(command_pipe[1], command, strlen(command));
+	memset(iobuf, '\0', iosize);
+	read(response_pipe[0], iobuf, iosize);
+	printf("Get result %s\n", iobuf);
+	sleep(2);
 	return FILEBENCH_OK;
 }
 
@@ -544,7 +547,7 @@ fb_lfsflow_aiowait(threadflow_t *threadflow, flowop_t *flowop)
 static int
 fb_lfs_open(fb_fdesc_t *fd, char *path, int flags, int perms)
 {
-	// memset(fd->fname, '\0', sizeof(fd->fname));
+	memset(fd->fname, '\0', sizeof(fd->fname));
 	strcpy(fd->fname, path);
 	if(1) {
 		// printf("open success\n");
@@ -709,26 +712,22 @@ fb_lfs_pwrite(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t offset)
 static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
+	memset(iobuf, 'd', iosize);
 	// printf("RUNNING WRITE\n");
-	size_t s = 128 + 5;
-	char result[s];
-    sprintf(result, "put %s ", fd->fname);
-	for (size_t i = 0; i < s; i++) {
-		if (result[i] == '\0') {
-			s = i;
-			break;
-		} else {
-			*(iobuf + i) = result[i];
-		}
-	}
-	for (size_t i = s; i < iosize; i++) {
-		*(iobuf + i) = rand() % 26 + 'a';
-	}
-	*(iobuf + iosize - 2) = '\n';
-	write(pipe_fd[1], iobuf, iosize + 1);
+	size_t s = strlen(fd->fname) + 6;
+	char command[s];
+    sprintf(command, "put %s ", fd->fname);
+	strcpy(iobuf, command);
+	iobuf[s - 1] = 'd';
+	// iobuf[iosize - 1] = '\0';
+	// printf("%s\n", iobuf);
+	// printf("%lu\n", s);
+	iobuf[iosize - 1] = '\n';
+	write(command_pipe[1], iobuf, iosize);
 	char buf[60];
-	read(pipe_fd_input[0], buf, 60);
-	// printf("Write result: %s\n", iobuf);
+    memset(buf, '\0', sizeof(buf));
+	read(response_pipe[0], buf, sizeof(buf));
+	printf("Put result: %s\n", buf);
 	return (iosize);
 }
 
