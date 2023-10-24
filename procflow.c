@@ -713,6 +713,12 @@ procflow_shutdown(void)
 	(void) ipc_mutex_lock(&filebench_shm->shm_procs_running_lock);
 	filebench_shm->shm_procs_running = 0;
 	(void) ipc_mutex_unlock(&filebench_shm->shm_procs_running_lock);
+
+	if (filebench_shm->sock_fd >= 0) {
+		close(filebench_shm->sock_fd);
+	}
+
+	unlink (CLIENT_SOCK_FILE);
 }
 
 

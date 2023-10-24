@@ -92,6 +92,9 @@
 #define	FILEBENCH_FILESETPATHMEMORY	(FILEBENCH_NFILESETENTRIES * FSE_MAXPATHLEN)
 #define	FILEBENCH_STRINGMEMORY		(FILEBENCH_NVARIABLES * 128)
 
+#define CLIENT_SOCK_FILE "client.sock"
+#define SERVER_SOCK_FILE "server.sock"
+
 typedef struct filebench_shm {
 	/*
 	 * All fields down to shm_marker are set to zero during
@@ -197,6 +200,7 @@ typedef struct filebench_shm {
 	size_t		shm_allocated;
 	caddr_t		shm_addr;
 	char		*shm_ptr;
+	int			sock_fd;
 
 	/*
 	 * Type of plug-in file system client to use. Defaults to
@@ -244,6 +248,7 @@ typedef struct filebench_shm {
 } filebench_shm_t;
 
 extern char shmpath[128];
+
 
 extern void ipc_init(void);
 extern int ipc_attach(void *shmaddr);

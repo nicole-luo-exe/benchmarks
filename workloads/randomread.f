@@ -24,8 +24,8 @@
 #
 
 set $dir=/tmp
-set $filesize=5g
-set $iosize=8k
+set $filesize=10k
+set $iosize=10k
 set $nthreads=1
 set $workingset=0
 set $directio=0
@@ -36,7 +36,7 @@ define process name=rand-read,instances=1
 {
   thread name=rand-thread,memsize=5m,instances=$nthreads
   {
-    flowop read name=rand-read1,filename=largefile1,iosize=$iosize,random,workingset=$workingset,directio=$directio
+    flowop read name=rand-read1,filename=largefile1,iosize=$iosize,workingset=$workingset,directio=$directio
   }
 }
 
@@ -48,3 +48,4 @@ usage "       set \$nthreads=<value>  defaults to $nthreads"
 usage "       set \$workingset=<value>  defaults to $workingset"
 usage "       set \$directio=<bool>   defaults to $directio"
 usage "       run runtime (e.g. run 60)"
+run 10

@@ -52,21 +52,52 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include "ipc.h"
 
-static int command_pipe[2];
-static int response_pipe[2];
+static struct sockaddr_un addr;
+struct sockaddr_un from;
+
+void init_client_socket() {
+	int ok = 1;
+	int sock_fd;
+
+	if ((sock_fd = socket(PF_UNIX, SOCK_DGRAM, 0)) < 0) {
+		perror("socket");
+		ok = 0;
+	}
+
+	// printf("%d\n", sock_fd);
+
+	if (ok) {
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strcpy(addr.sun_path, CLIENT_SOCK_FILE);
+		unlink(CLIENT_SOCK_FILE);
+		if (bind(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			perror("bind");
+			ok = 0;
+		}
+	}
+
+
+	if (ok) {
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strcpy(addr.sun_path, SERVER_SOCK_FILE);
+		if (connect(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+			perror("connect");
+			ok = 0;
+		}
+	}
+	filebench_shm->sock_fd = sock_fd;
+}
 
 void kademlia_init() {
 
 	filebench_log(LOG_INFO, "Initializing Kademlia...");
-      // File descriptors for the pipe
     pid_t child_pid;
-
-    // Create a pipe
-    if (pipe(command_pipe) == -1 || pipe(response_pipe) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
 
     // Fork the process
     child_pid = fork();
@@ -78,24 +109,15 @@ void kademlia_init() {
 
     if (child_pid == 0) {
 		filebench_log(LOG_INFO, "Created child process...");
-        // This is the child process
-        // Redirect stdin to read from the pipe
-        close(command_pipe[1]);
-		close(response_pipe[0]);
-        dup2(command_pipe[0], STDIN_FILENO);
-        dup2(response_pipe[1], STDOUT_FILENO);
         
-		char *file = "/users/luosiyi/kademlia/build/examples/kademlia_cli";
+		char *file = "/users/luosiyi/kademlia/build/examples/sock_server";
 
-        // Now, the child can read from stdin
         execlp(file, file, "6768", "127.0.0.1:6767", NULL);
         perror("execlp");
         exit(EXIT_FAILURE);
     } else {
-		close(STDIN_FILENO);
-		// close(STDOUT_FILENO);
-		close(command_pipe[0]);
-		close(response_pipe[1]);
+		sleep(1);
+		init_client_socket();
 		filebench_log(LOG_INFO, "Finish initializing Kademlia");
 	}
 }
@@ -250,15 +272,18 @@ fb_lfs_pread(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t fileoffset)
 static int
 fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
-	size_t s = strlen(fd->fname) + 5;
+	size_t s = strlen(fd->fname) + 10;
 	char command[s];
-    sprintf(command, "get %s\n", fd->fname);
-	// printf("%s\n", command);
-	write(command_pipe[1], command, strlen(command));
-	memset(iobuf, '\0', iosize);
-	read(response_pipe[0], iobuf, iosize);
-	printf("Get result %s\n", iobuf);
-	sleep(2);
+	int sock_fd = filebench_shm->sock_fd;
+
+    sprintf(command, "get %s", fd->fname);
+	if (send(sock_fd, command, strlen(command)+1, 0) == -1) {
+		perror("send");
+	}
+	int len;
+	if ((len = recv(sock_fd, iobuf, iosize, 0)) < 0) {
+		perror("recv");
+	}
 	return FILEBENCH_OK;
 }
 
@@ -712,23 +737,27 @@ fb_lfs_pwrite(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize, off64_t offset)
 static int
 fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 {
+	int sock_fd = filebench_shm->sock_fd;
 	memset(iobuf, 'd', iosize);
+	iobuf[iosize - 1] = '\0';
 	// printf("RUNNING WRITE\n");
-	size_t s = strlen(fd->fname) + 6;
+	size_t s = strlen(fd->fname) + 10;
 	char command[s];
-    sprintf(command, "put %s ", fd->fname);
-	strcpy(iobuf, command);
-	iobuf[s - 1] = 'd';
-	// iobuf[iosize - 1] = '\0';
-	// printf("%s\n", iobuf);
-	// printf("%lu\n", s);
-	iobuf[iosize - 1] = '\n';
-	write(command_pipe[1], iobuf, iosize);
-	char buf[60];
-    memset(buf, '\0', sizeof(buf));
-	read(response_pipe[0], buf, sizeof(buf));
-	printf("Put result: %s\n", buf);
-	return (iosize);
+    sprintf(command, "put %s %lu", fd->fname, iosize);
+	if (send(sock_fd, command, strlen(command)+1, 0) == -1) {
+		perror("send");
+	}
+
+	if (send(sock_fd, iobuf, iosize, 0) == -1) {
+		perror("send");
+	}
+	char response[60];
+	int len;
+	if ((len = recv(sock_fd, response, 60, 0)) < 0) {
+		perror("recv");
+	}
+	// printf("Put result: %s", response);
+	return strcmp(response, "SUCCESS") == 0 ? iosize: 0;
 }
 
 /*
