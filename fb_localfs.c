@@ -277,6 +277,7 @@ fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 	int sock_fd = filebench_shm->sock_fd;
 
     sprintf(command, "get %s", fd->fname);
+	// printf("%s: %lu\n", command, iosize);
 	if (send(sock_fd, command, strlen(command)+1, 0) == -1) {
 		perror("send");
 	}
@@ -284,7 +285,7 @@ fb_lfs_read(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 	if ((len = recv(sock_fd, iobuf, iosize, 0)) < 0) {
 		perror("recv");
 	}
-	return FILEBENCH_OK;
+	return len;
 }
 
 #ifdef HAVE_AIO
@@ -744,6 +745,7 @@ fb_lfs_write(fb_fdesc_t *fd, caddr_t iobuf, fbint_t iosize)
 	size_t s = strlen(fd->fname) + 10;
 	char command[s];
     sprintf(command, "put %s %lu", fd->fname, iosize);
+	// printf("%s\n", command);
 	if (send(sock_fd, command, strlen(command)+1, 0) == -1) {
 		perror("send");
 	}

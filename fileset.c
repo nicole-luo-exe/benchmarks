@@ -1376,20 +1376,7 @@ fileset_populate_file(fileset_t *fileset, filesetentry_t *parent, int serial)
 	}
 
 	/* see if random variable was supplied for file size */
-	if (fileset->fs_meansize == -1) {
-		entry->fse_size = (off64_t)avd_get_int(fileset->fs_size);
-	} else {
-		double gamma;
-
-		gamma = avd_get_int(fileset->fs_sizegamma) / 1000.0;
-		if (gamma > 0) {
-			drand = gamma_dist_knuth(gamma,
-			    fileset->fs_meansize / gamma);
-			entry->fse_size = (off64_t)drand;
-		} else {
-			entry->fse_size = (off64_t)fileset->fs_meansize;
-		}
-	}
+	entry->fse_size = (off64_t)avd_get_int(fileset->fs_size);
 
 	fileset->fs_bytes += entry->fse_size;
 
