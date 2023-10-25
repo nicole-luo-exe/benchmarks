@@ -24,6 +24,7 @@
  */
 
 #include <stdio.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <time.h>
@@ -370,6 +371,9 @@ filebench_shutdown(int error) {
 
 	procflow_shutdown();
 
+	(void) kill(filebench_shm->kademlia_child, SIGTERM);
+	close(filebench_shm->sock_fd);
+	(void) unlink (CLIENT_SOCK_FILE);
 	(void) unlink("/tmp/filebench_shm");
 	ipc_ismdelete();
 	exit(error);

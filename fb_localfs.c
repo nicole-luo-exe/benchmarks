@@ -118,6 +118,7 @@ void kademlia_init() {
     } else {
 		sleep(1);
 		init_client_socket();
+		filebench_shm->kademlia_child = child_pid;
 		filebench_log(LOG_INFO, "Finish initializing Kademlia");
 	}
 }

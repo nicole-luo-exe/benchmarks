@@ -201,6 +201,7 @@ typedef struct filebench_shm {
 	caddr_t		shm_addr;
 	char		*shm_ptr;
 	int			sock_fd;
+	pid_t		kademlia_child;
 
 	/*
 	 * Type of plug-in file system client to use. Defaults to
